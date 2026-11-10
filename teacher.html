@@ -53,7 +53,21 @@ main{max-width:1250px;margin:auto;padding:18px}.panel{display:none}.panel.active
 @media(max-width:900px){.scores{grid-template-columns:repeat(2,1fr)}.toprow{grid-template-columns:1fr}.controls,.activities,.eventrow{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){main{padding:10px}.scores{grid-template-columns:1fr 1fr}.card{padding:12px;border-radius:20px}.score{font-size:38px}.bigactions{grid-template-columns:1fr}.big{min-height:100px}.scoregrid{grid-template-columns:repeat(3,1fr)}.eventrow{grid-template-columns:repeat(2,1fr)}}
 
-.tabs{display:none}</style></head><body><header><div><h1>👑 珮瑜的萬用課堂闖關</h1><div class="sub">👩‍🏫 老師端｜Firebase 即時同步</div></div></header><main><section id="teacher" class="panel active">
+.tabs{display:none}
+.loginCard{max-width:420px;margin:12px auto 20px}.loginCard h2{margin-top:0}.loginCard label{display:block;margin:12px 0;font-weight:700}
+.loginCard input{display:block;width:100%;padding:10px;margin-top:6px;border:1px solid #8898b2;border-radius:8px;font:inherit}
+.authBtn{padding:10px 16px;border-radius:8px;background:#172033;color:white;font-weight:800}
+#authBar{text-align:right;margin-bottom:14px}#authMessage{min-height:1.4em;margin-bottom:0}
+</style></head><body><header><div><h1>👑 珮瑜的萬用課堂闖關</h1><div class="sub">👩‍🏫 老師端｜Firebase 即時同步</div></div></header><main>
+  <form id="loginForm" class="card loginCard">
+    <h2 id="loginTitle">老師端登入</h2>
+    <label>登入帳號<input id="loginEmail" type="email" autocomplete="username" required></label>
+    <label>遊戲密碼<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+    <button class="authBtn" id="loginButton" type="submit" disabled>登入</button>
+    <p id="authMessage" role="status">正在載入登入功能…</p>
+  </form>
+  <div id="authBar" hidden><button id="logoutButton" class="authBtn" type="button">登出</button></div>
+<section id="teacher" class="panel">
   <div class="toprow">
     <div class="card roundbox">
       <button class="roundbtn" id="roundMinus">−</button><div><div class="sub">目前回合</div><div class="roundnum">第 <span id="round">1</span> 回合</div></div><button class="roundbtn" id="roundPlus">＋</button>
@@ -75,26 +89,116 @@ main{max-width:1250px;margin:auto;padding:18px}.panel{display:none}.panel.active
   <div class="status" id="teacherStatus">等待老師開啟活動</div>
   <div class="smallnote">老師每組只有 −1／＋1，可重複按；「下一回合」請按右側 ＋。</div>
 </section></main><script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script><script>
 const animals=['🦁','🐯','🐼','🦊','🐸'];
-const app=firebase.initializeApp(firebaseConfig); const db=firebase.database();
-const room='main'; const root=db.ref('rooms/'+room);
+function startTeacherGame(root) {
 let state={round:1,scores:[0,0,0,0,0],diceResults:[null,null,null,null,null],open:{buzz:false,dice:false,score:false,random:false,bomb:false,double:false,steal:false},used:{dice:[false,false,false,false,false],score:[false,false,false,false,false]},buzzerWinner:null,doubleMode:false,status:'等待老師開啟活動'};
 let soundOn=true; const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function beep(freq=660,dur=.12,type='sine'){if(!soundOn)return;const A=new (window.AudioContext||window.webkitAudioContext)(),o=A.createOscillator(),g=A.createGain();o.type=type;o.frequency.value=freq;o.connect(g);g.connect(A.destination);g.gain.setValueAtTime(.26,A.currentTime);g.gain.exponentialRampToValueAtTime(.001,A.currentTime+dur);o.start();o.stop(A.currentTime+dur)}
 function successSound(){beep(523,.14,'square');setTimeout(()=>beep(659,.14,'square'),130);setTimeout(()=>beep(784,.16,'square'),260);setTimeout(()=>beep(1047,.48,'square'),410)}
 function normalize(v={}){return {round:v.round||1,scores:Array.from({length:5},(_,i)=>(v.scores&&v.scores[i])||0),diceResults:Array.from({length:5},(_,i)=>v.diceResults&&v.diceResults[i]!=null?v.diceResults[i]:null),open:Object.assign({buzz:false,dice:false,score:false,random:false,bomb:false,double:false,steal:false},v.open||{}),used:{dice:Array.from({length:5},(_,i)=>!!(v.used&&v.used.dice&&v.used.dice[i])),score:Array.from({length:5},(_,i)=>!!(v.used&&v.used.score&&v.used.score[i]))},buzzerWinner:v.buzzerWinner==null?null:v.buzzerWinner,doubleMode:!!v.doubleMode,status:v.status||'等待老師開啟活動'} }
-async function patch(p){await root.update(p)}
-function render(){state=normalize(state);$('#round').textContent=state.round;$('#teacherScores').innerHTML=state.scores.map((s,i)=>`<div class="card team" id="teamCard${i}"><div class="animal">${animals[i]}</div><div class="teamname">第 ${i+1} 組</div><div class="score">${s}</div><div class="diceResult ${state.diceResults[i]!=null?'rolled':''}">${state.diceResults[i]==null?'🎲':`🎲 ${state.diceResults[i]}`}</div><div class="stepper"><button class="pm minus" onclick="teacherAdjust(${i},-1)">−1</button><button class="pm plus" onclick="teacherAdjust(${i},1)">＋1</button></div></div>`).join('');$('#teacherStatus').textContent=state.status;$$('.ctl').forEach(b=>b.classList.remove('on'));if(state.open.buzz)$('#openBuzz').classList.add('on');if(state.open.dice)$('#openDice').classList.add('on');if(state.open.score)$('#openScore').classList.add('on');$$('.gamebtn').forEach(b=>b.style.outline=state.open[b.dataset.type]?'4px solid #6ee7b7':'none')}
-root.on('value',snap=>{const prev=state.buzzerWinner;state=normalize(snap.val()||{});render();if(state.buzzerWinner!=null && state.buzzerWinner!==prev){successSound();const i=state.buzzerWinner;setTimeout(()=>{const c=document.getElementById('teamCard'+i);if(c){c.classList.remove('neon-team');void c.offsetWidth;c.classList.add('neon-team');setTimeout(()=>c.classList.remove('neon-team'),6000)}},50)}});
-root.once('value').then(s=>{if(!s.exists())root.set(state)});
-window.teacherAdjust=async(i,n)=>{const r=root.child('scores/'+i);await r.transaction(v=>(Number(v)||0)+n);beep(n>0?760:260,.08)};
+let ready = false;
+const teacherStatus = $('#teacherStatus');
+teacherStatus.textContent = '正在連線至遊戲資料庫…';
+async function write(action) {
+  if (!ready) return;
+  try {
+    await action();
+  } catch (error) {
+    teacherStatus.textContent = '操作未送出，請檢查連線或資料庫權限。';
+    console.error(error);
+  }
+}
+const patch = updates => write(() => root.update(updates));
+function render(){state=normalize(state);$('#round').textContent=state.round;$('#teacherScores').innerHTML=state.scores.map((s,i)=>`<div class="card team" id="teamCard${i}"><div class="animal">${animals[i]}</div><div class="teamname">第 ${i+1} 組</div><div class="score">${s}</div><div class="diceResult ${state.diceResults[i]!=null?'rolled':''}">${state.diceResults[i]==null?'🎲':`🎲 ${state.diceResults[i]}`}</div><div class="stepper"><button class="pm minus" onclick="teacherAdjust(${i},-1)">−1</button><button class="pm plus" onclick="teacherAdjust(${i},1)">＋1</button></div></div>`).join('');teacherStatus.textContent=state.open.buzz && state.buzzerWinner!=null ? `🔔 ${animals[state.buzzerWinner]} 第 ${state.buzzerWinner+1} 組｜搶答成功！請回答` : state.status;$$('.ctl').forEach(b=>b.classList.remove('on'));if(state.open.buzz && state.buzzerWinner==null)$('#openBuzz').classList.add('on');if(state.open.dice)$('#openDice').classList.add('on');if(state.open.score)$('#openScore').classList.add('on');$$('.gamebtn').forEach(b=>b.style.outline=state.open[b.dataset.type]?'4px solid #6ee7b7':'none')}
+root.on('value',snap=>{ready=true;const prev=state.buzzerWinner;state=normalize(snap.val()||{});render();if(state.buzzerWinner!=null && state.buzzerWinner!==prev){successSound();const i=state.buzzerWinner;setTimeout(()=>{const c=document.getElementById('teamCard'+i);if(c){c.classList.remove('neon-team');void c.offsetWidth;c.classList.add('neon-team');setTimeout(()=>c.classList.remove('neon-team'),6000)}},50)}}, () => {
+  ready = false;
+  teacherStatus.textContent = '無法讀取遊戲資料，請確認 Firebase 資料庫規則已發布。';
+});
+window.teacherAdjust=(i,n)=>write(async()=>{const r=root.child('scores/'+i);await r.transaction(v=>(Number(v)||0)+n);beep(n>0?760:260,.08)});
 $('#roundMinus').onclick=()=>patch({round:Math.max(1,state.round-1)});
-$('#roundPlus').onclick=()=>root.update({round:state.round+1,buzzerWinner:null,diceResults:[null,null,null,null,null],'used/dice':[false,false,false,false,false],'used/score':[false,false,false,false,false],'open/buzz':false,'open/dice':false,'open/score':false,status:'進入第 '+(state.round+1)+' 回合'});
-$('#openBuzz').onclick=()=>root.update({'open/buzz':!state.open.buzz,buzzerWinner:null,status:!state.open.buzz?'🔔 搶答已開放！':'🔒 搶答已關閉'});
-$('#openDice').onclick=()=>root.update({'open/dice':!state.open.dice,'used/dice':[false,false,false,false,false],diceResults:[null,null,null,null,null],status:!state.open.dice?'🎲 骰子已開放！各組可擲一次':'🔒 骰子已關閉'});
-$('#openScore').onclick=()=>root.update({'open/score':!state.open.score,'used/score':[false,false,false,false,false],status:!state.open.score?'➕➖ 加扣分已開放：每組限一次':'🔒 加扣分已關閉'});
+$('#roundPlus').onclick=()=>patch({round:state.round+1,buzzerWinner:null,diceResults:[null,null,null,null,null],'used/dice':[false,false,false,false,false],'used/score':[false,false,false,false,false],'open/buzz':false,'open/dice':false,'open/score':false,status:'進入第 '+(state.round+1)+' 回合'});
+$('#openBuzz').onclick=()=>patch({'open/buzz':!state.open.buzz||state.buzzerWinner!=null,buzzerWinner:null,status:!state.open.buzz||state.buzzerWinner!=null?'🔔 搶答已開放！':'🔒 搶答已關閉'});
+$('#openDice').onclick=()=>patch({'open/dice':!state.open.dice,'used/dice':[false,false,false,false,false],diceResults:[null,null,null,null,null],status:!state.open.dice?'🎲 骰子已開放！各組可擲一次':'🔒 骰子已關閉'});
+$('#openScore').onclick=()=>patch({'open/score':!state.open.score,'used/score':[false,false,false,false,false],status:!state.open.score?'➕➖ 加扣分已開放：每組限一次':'🔒 加扣分已關閉'});
 $('#soundToggle').onclick=()=>{soundOn=!soundOn;$('#soundToggle').textContent=soundOn?'🔊 音效：開':'🔇 音效：關';if(soundOn)beep()};
-$$('.gamebtn').forEach(b=>b.onclick=()=>{const t=b.dataset.type,names={random:'💎 隨機事件',bomb:'💣 炸彈題',double:'🔥 加倍題',steal:'👑 偷分卡'};root.update({['open/'+t]:!state.open[t],status:`${names[t]} ${!state.open[t]?'已開放':'已關閉'}`})});
+$$('.gamebtn').forEach(b=>b.onclick=()=>{const t=b.dataset.type,names={random:'💎 隨機事件',bomb:'💣 炸彈題',double:'🔥 加倍題',steal:'👑 偷分卡'};patch({['open/'+t]:!state.open[t],status:`${names[t]} ${!state.open[t]?'已開放':'已關閉'}`})});
+}
+
+async function connectLogin(appName, expectedUid, startGame) {
+  const form = document.getElementById('loginForm');
+  const button = document.getElementById('loginButton');
+  const message = document.getElementById('authMessage');
+  const password = document.getElementById('loginPassword');
+  const panel = document.getElementById('teacher');
+  const bar = document.getElementById('authBar');
+  const logout = document.getElementById('logoutButton');
+  try {
+    const app = firebase.initializeApp(firebaseConfig, appName);
+    const auth = app.auth();
+    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+    let started = false;
+    let wrongAccount = false;
+    form.onsubmit = async event => {
+      event.preventDefault();
+      button.disabled = true;
+      wrongAccount = false;
+      message.textContent = '登入中…';
+      try {
+        await auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value.trim(), password.value);
+      } catch (error) {
+        message.textContent = error.code === 'auth/network-request-failed'
+          ? '連線失敗，請檢查網路後再試。'
+          : '登入失敗，請確認遊戲帳號和密碼。';
+        button.disabled = false;
+      } finally {
+        password.value = '';
+      }
+    };
+    logout.onclick = async () => {
+      logout.disabled = true;
+      try {
+        await auth.signOut();
+      } catch (error) {
+        logout.disabled = false;
+        document.getElementById('teacherStatus').textContent = '登出失敗，請再試一次。';
+      }
+    };
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        if (started) {
+          panel.classList.remove('active');
+          location.reload();
+          return;
+        }
+        message.textContent = wrongAccount ? '這個帳號無法進入此頁，請使用對應帳號。' : '';
+        button.disabled = false;
+        return;
+      }
+      if (user.uid !== expectedUid) {
+        wrongAccount = true;
+        try {
+          await auth.signOut();
+        } catch (error) {
+          message.textContent = '此帳號無法使用本頁。請關閉分頁，再以對應帳號開啟。';
+        }
+        return;
+      }
+      if (started) return;
+      started = true;
+      form.hidden = true;
+      bar.hidden = false;
+      panel.classList.add('active');
+      startGame(app.database().ref('rooms/main'));
+    }, () => {
+      message.textContent = '登入服務無法使用，請重新整理。';
+    });
+  } catch (error) {
+    message.textContent = '無法載入登入服務，請檢查網路後重新整理。';
+    console.error(error);
+  }
+}
+connectLogin('classroom-teacher', '0TLxtlzvljZeyweWfZl5gS6gCUa2', startTeacherGame);
 </script></body></html>

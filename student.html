@@ -53,7 +53,21 @@ main{max-width:1250px;margin:auto;padding:18px}.panel{display:none}.panel.active
 @media(max-width:900px){.scores{grid-template-columns:repeat(2,1fr)}.toprow{grid-template-columns:1fr}.controls,.activities,.eventrow{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){main{padding:10px}.scores{grid-template-columns:1fr 1fr}.card{padding:12px;border-radius:20px}.score{font-size:38px}.bigactions{grid-template-columns:1fr}.big{min-height:100px}.scoregrid{grid-template-columns:repeat(3,1fr)}.eventrow{grid-template-columns:repeat(2,1fr)}}
 
-.tabs{display:none}</style></head><body><header><div><h1>👑 珮瑜的萬用課堂闖關</h1><div class="sub">📱 學生端｜Firebase 即時同步</div></div></header><main><section id="student" class="panel active">
+.tabs{display:none}
+.loginCard{max-width:420px;margin:12px auto 20px}.loginCard h2{margin-top:0}.loginCard label{display:block;margin:12px 0;font-weight:700}
+.loginCard input{display:block;width:100%;padding:10px;margin-top:6px;border:1px solid #8898b2;border-radius:8px;font:inherit}
+.authBtn{padding:10px 16px;border-radius:8px;background:#172033;color:white;font-weight:800}
+#authBar{text-align:right;margin-bottom:14px}#authMessage{min-height:1.4em;margin-bottom:0}
+</style></head><body><header><div><h1>👑 珮瑜的萬用課堂闖關</h1><div class="sub">📱 學生端｜Firebase 即時同步</div></div></header><main>
+  <form id="loginForm" class="card loginCard">
+    <h2 id="loginTitle">小組登入</h2>
+    <label>登入帳號<input id="loginEmail" type="email" autocomplete="username" required></label>
+    <label>遊戲密碼<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+    <button class="authBtn" id="loginButton" type="submit" disabled>登入</button>
+    <p id="authMessage" role="status">正在載入登入功能…</p>
+  </form>
+  <div id="authBar" hidden><button id="logoutButton" class="authBtn" type="button">登出</button></div>
+<section id="student" class="panel active">
   <div class="card studentHead">
     <div><div class="sub">學生 iPad</div><div id="teamPrompt" style="font-size:24px;font-weight:900">掃 QR Code 已指定組別</div></div>
     <div class="studentScore"><span id="studentAnimal"></span> 第 <span id="studentTeam">—</span> 組<br>目前 <b id="studentScore">0</b> 分</div>
@@ -90,35 +104,156 @@ const studentStatus = $('#studentStatus');
 if (selected >= 0) {
   $('#studentAnimal').textContent = animals[selected];
   $('#studentTeam').textContent = selected + 1;
+  $('#student').classList.remove('active');
+  $('#loginTitle').textContent = '第 ' + team + ' 組登入';
+  $('#loginEmail').value = 'team' + team + '@example.com';
 } else {
+  $('#loginForm').hidden = true;
   $('#teamPrompt').textContent = '尚未指定組別';
   studentStatus.innerHTML = '請掃描各組的 QR Code，或<a href="./">回首頁選擇組別</a>。';
 }
 </script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script><script>
-function startStudentGame() {
-const app=firebase.initializeApp(firebaseConfig);const db=firebase.database();const root=db.ref('rooms/main');let state={};let soundOn=true;
+function startStudentGame(root) {
+let state = {};
+let soundOn = true;
+let rolling = false;
 function beep(freq=660,dur=.12,type='sine'){if(!soundOn)return;const A=new (window.AudioContext||window.webkitAudioContext)(),o=A.createOscillator(),g=A.createGain();o.type=type;o.frequency.value=freq;o.connect(g);g.connect(A.destination);g.gain.setValueAtTime(.26,A.currentTime);g.gain.exponentialRampToValueAtTime(.001,A.currentTime+dur);o.start();o.stop(A.currentTime+dur)}
 function successSound(){beep(523,.14,'square');setTimeout(()=>beep(659,.14,'square'),130);setTimeout(()=>beep(784,.16,'square'),260);setTimeout(()=>beep(1047,.48,'square'),410)}
 function norm(v={}){v.scores=v.scores||[0,0,0,0,0];v.diceResults=v.diceResults||[null,null,null,null,null];v.open=Object.assign({buzz:false,dice:false,score:false,random:false,bomb:false,double:false,steal:false},v.open||{});v.used=v.used||{};v.used.dice=v.used.dice||[false,false,false,false,false];v.used.score=v.used.score||[false,false,false,false,false];return v}
-function render(){state=norm(state);$('#studentScore').textContent=state.scores[selected]||0;$('#buzzBtn').disabled=!state.open.buzz||state.buzzerWinner!=null;$('#buzzBtn').innerHTML=state.open.buzz&&state.buzzerWinner==null?'🔔 搶答鈴<br><span class="sub">現在可以搶！</span>':'🔔 搶答鈴<br><span class="sub">'+(state.buzzerWinner!=null?'本輪已有人搶到':'等待老師開放')+'</span>';$('#diceBtn').disabled=!state.open.dice||state.used.dice[selected];$('#diceText').textContent=!state.open.dice?'🔒 等待老師開放':state.used.dice[selected]?`本輪已擲：${state.diceResults[selected]??''}`:'✨ 現在可以擲！';$('#scoreLock').textContent=state.open.score&&!state.used.score[selected]?'｜現在可以選一次':'｜'+(state.used.score[selected]?'本輪已使用':'等待老師開放');$$('.scorechoice').forEach(b=>b.disabled=!state.open.score||state.used.score[selected]);['random','bomb','double','steal'].forEach(t=>$('#'+t+'Btn').disabled=!state.open[t])}
+function render(){state=norm(state);$('#studentScore').textContent=state.scores[selected]||0;$('#buzzBtn').disabled=!state.open.buzz||state.buzzerWinner!=null;$('#buzzBtn').innerHTML=state.open.buzz&&state.buzzerWinner==null?'🔔 搶答鈴<br><span class="sub">現在可以搶！</span>':'🔔 搶答鈴<br><span class="sub">'+(state.buzzerWinner!=null?'本輪已有人搶到':'等待老師開放')+'</span>';$('#diceBtn').disabled=rolling||!state.open.dice||state.diceResults[selected]!=null;$('#diceText').textContent=!state.open.dice?'🔒 等待老師開放':state.diceResults[selected]!=null?`本輪已擲：${state.diceResults[selected]??''}`:'✨ 現在可以擲！';$('#scoreLock').textContent=state.open.score&&!state.used.score[selected]?'｜現在可以選一次':'｜'+(state.used.score[selected]?'本輪已使用':'等待老師開放');$$('.scorechoice').forEach(b=>b.disabled=!state.open.score||state.used.score[selected]);['random','bomb','double','steal'].forEach(t=>$('#'+t+'Btn').disabled=!state.open[t])}
 root.on('value',s=>{state=norm(s.val()||{});render();if(state.buzzerWinner===selected)$('#studentStatus').textContent='🎉 搶到了！請回答老師的問題';else if(state.buzzerWinner!=null)studentStatus.textContent='🔒 本輪已由其他組搶到';else if(studentStatus.textContent==='正在連線至老師端…')studentStatus.textContent='🔒 等待老師開放'}, () => {
   studentStatus.textContent = '無法讀取老師端資料，請通知老師。';
 });
-$('#buzzBtn').onclick=async()=>{if(!state.open.buzz||state.buzzerWinner!=null)return;const r=await root.child('buzzerWinner').transaction(v=>v==null?selected:undefined);if(r.committed){await root.update({'open/buzz':false,status:`🔔 ${animals[selected]} 第 ${selected+1} 組｜搶答成功！請回答`});successSound()}};
-$('#diceBtn').onclick=async()=>{if(!state.open.dice||state.used.dice[selected])return;const lock=await root.child('used/dice/'+selected).transaction(v=>v?undefined:true);if(!lock.committed)return;let n=1,k=0;const timer=setInterval(async()=>{n=1+Math.floor(Math.random()*6);$('#diceText').textContent='🎲 '+n;beep(260+n*45,.04);if(++k>9){clearInterval(timer);await root.update({['diceResults/'+selected]:n,status:`🎲 ${animals[selected]} 第 ${selected+1} 組擲到 ${n} 點`});$('#studentStatus').textContent=`🎲 第 ${selected+1} 組擲到 ${n} 點！`;successSound()}},80)};
-async function studentScore(n){if(!state.open.score||state.used.score[selected])return;const lock=await root.child('used/score/'+selected).transaction(v=>v?undefined:true);if(!lock.committed)return;const applied=state.doubleMode?n*2:n;await root.child('scores/'+selected).transaction(v=>(Number(v)||0)+applied);$('#studentStatus').textContent=`已送出 ${applied>0?'+':''}${applied} 分，等待下一次開放`;beep(applied>0?760:240,.12)}
-window.studentScore=studentScore;$('#plusGrid').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="scorechoice pos" onclick="studentScore(${n})">+${n}</button>`).join('');$('#minusGrid').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="scorechoice neg" onclick="studentScore(${-n})">-${n}</button>`).join('');
-$('#randomBtn').onclick=()=>$('#studentStatus').textContent='💎 隨機事件已開放，請依老師指示';$('#bombBtn').onclick=()=>$('#studentStatus').textContent='💣 炸彈題進行中！';$('#doubleBtn').onclick=()=>$('#studentStatus').textContent='🔥 加倍題進行中！';$('#stealBtn').onclick=()=>$('#studentStatus').textContent='👑 偷分卡已開放，請依老師指示';
-}
-if (selected >= 0) {
+async function sendAction(action) {
   try {
-    startStudentGame();
+    await action();
   } catch (error) {
-    studentStatus.textContent = '無法載入即時連線，請重新整理或通知老師。';
+    studentStatus.textContent = '操作未送出，請等老師開放後再試。';
     console.error(error);
   }
 }
+$('#buzzBtn').onclick = () => sendAction(async () => {
+  if (!state.open.buzz || state.buzzerWinner != null) return;
+  const result = await root.child('buzzerWinner').transaction(winner => winner == null ? selected : undefined, undefined, false);
+  if (result.committed) successSound();
+});
+$('#diceBtn').onclick = () => sendAction(async () => {
+  if (rolling || !state.open.dice || state.diceResults[selected] != null) return;
+  const round = state.round;
+  rolling = true;
+  $('#diceBtn').disabled = true;
+  let points;
+  try {
+    for (let frame = 0; frame < 10; frame++) {
+      points = 1 + Math.floor(Math.random() * 6);
+      $('#diceText').textContent = '🎲 ' + points;
+      beep(260 + points * 45, .04);
+      await new Promise(resolve => setTimeout(resolve, 80));
+    }
+    if (state.round !== round || !state.open.dice) return;
+    const result = await root.child('diceResults/' + selected).transaction(previous => previous == null ? points : undefined, undefined, false);
+    if (result.committed) {
+      studentStatus.textContent = '🎲 第 ' + team + ' 組擲到 ' + points + ' 點！';
+      successSound();
+    }
+  } finally {
+    rolling = false;
+    render();
+  }
+});
+function studentScore(points) {
+  if (!Number.isInteger(points) || points === 0 || Math.abs(points) > 6 || !state.open.score || state.used.score[selected]) return;
+  return sendAction(async () => {
+    const applied = state.doubleMode ? points * 2 : points;
+    await root.update({
+      ['used/score/' + selected]: true,
+      ['scores/' + selected]: firebase.database.ServerValue.increment(applied)
+    });
+    studentStatus.textContent = `已送出 ${applied > 0 ? '+' : ''}${applied} 分，等待下一次開放`;
+    beep(applied > 0 ? 760 : 240, .12);
+  });
+}
+window.studentScore=studentScore;$('#plusGrid').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="scorechoice pos" onclick="studentScore(${n})">+${n}</button>`).join('');$('#minusGrid').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="scorechoice neg" onclick="studentScore(${-n})">-${n}</button>`).join('');
+$('#randomBtn').onclick=()=>$('#studentStatus').textContent='💎 隨機事件已開放，請依老師指示';$('#bombBtn').onclick=()=>$('#studentStatus').textContent='💣 炸彈題進行中！';$('#doubleBtn').onclick=()=>$('#studentStatus').textContent='🔥 加倍題進行中！';$('#stealBtn').onclick=()=>$('#studentStatus').textContent='👑 偷分卡已開放，請依老師指示';
+}
+
+async function connectLogin(appName, expectedUid, startGame) {
+  const form = document.getElementById('loginForm');
+  const button = document.getElementById('loginButton');
+  const message = document.getElementById('authMessage');
+  const password = document.getElementById('loginPassword');
+  const panel = document.getElementById('student');
+  const bar = document.getElementById('authBar');
+  const logout = document.getElementById('logoutButton');
+  try {
+    const app = firebase.initializeApp(firebaseConfig, appName);
+    const auth = app.auth();
+    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+    let started = false;
+    let wrongAccount = false;
+    form.onsubmit = async event => {
+      event.preventDefault();
+      button.disabled = true;
+      wrongAccount = false;
+      message.textContent = '登入中…';
+      try {
+        await auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value.trim(), password.value);
+      } catch (error) {
+        message.textContent = error.code === 'auth/network-request-failed'
+          ? '連線失敗，請檢查網路後再試。'
+          : '登入失敗，請確認遊戲帳號和密碼。';
+        button.disabled = false;
+      } finally {
+        password.value = '';
+      }
+    };
+    logout.onclick = async () => {
+      logout.disabled = true;
+      try {
+        await auth.signOut();
+      } catch (error) {
+        logout.disabled = false;
+        document.getElementById('studentStatus').textContent = '登出失敗，請再試一次。';
+      }
+    };
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        if (started) {
+          panel.classList.remove('active');
+          location.reload();
+          return;
+        }
+        message.textContent = wrongAccount ? '這個帳號無法進入此頁，請使用對應帳號。' : '';
+        button.disabled = false;
+        return;
+      }
+      if (user.uid !== expectedUid) {
+        wrongAccount = true;
+        try {
+          await auth.signOut();
+        } catch (error) {
+          message.textContent = '此帳號無法使用本頁。請關閉分頁，再以對應帳號開啟。';
+        }
+        return;
+      }
+      if (started) return;
+      started = true;
+      form.hidden = true;
+      bar.hidden = false;
+      panel.classList.add('active');
+      startGame(app.database().ref('rooms/main'));
+    }, () => {
+      message.textContent = '登入服務無法使用，請重新整理。';
+    });
+  } catch (error) {
+    message.textContent = '無法載入登入服務，請檢查網路後重新整理。';
+    console.error(error);
+  }
+}
+const teamUids = ["D1Dp7JE4skOl7mVwplQrQUoKJ0J2", "zS0bXJ76h5ZRurEMWyVYW9GLCx43", "Vmg13QR0KGh4S9xSPMSTEPnK1sn2", "jPcPK2v9YEWoMRCZZGMRLabLq8J2", "s8698bAgdJQXFqC0ehHmSFiAYiC2"];
+if (selected >= 0) connectLogin('classroom-student-' + team, teamUids[selected], startStudentGame);
 </script></body></html>
