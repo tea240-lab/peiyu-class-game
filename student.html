@@ -55,8 +55,8 @@ main{max-width:1250px;margin:auto;padding:18px}.panel{display:none}.panel.active
 
 .tabs{display:none}</style></head><body><header><div><h1>👑 珮瑜的萬用課堂闖關</h1><div class="sub">📱 學生端｜Firebase 即時同步</div></div></header><main><section id="student" class="panel active">
   <div class="card studentHead">
-    <div><div class="sub">學生 iPad</div><div style="font-size:24px;font-weight:900">掃 QR Code 已指定組別</div></div>
-    <div class="studentScore"><span id="studentAnimal">🦁</span> 第 <span id="studentTeam">1</span> 組<br>目前 <b id="studentScore">0</b> 分</div>
+    <div><div class="sub">學生 iPad</div><div id="teamPrompt" style="font-size:24px;font-weight:900">掃 QR Code 已指定組別</div></div>
+    <div class="studentScore"><span id="studentAnimal"></span> 第 <span id="studentTeam">—</span> 組<br>目前 <b id="studentScore">0</b> 分</div>
   </div>
   <div class="bigactions">
     <button class="big buzz" id="buzzBtn" disabled>🔔 搶答鈴<br><span class="sub">等待老師開放</span></button>
@@ -78,20 +78,47 @@ main{max-width:1250px;margin:auto;padding:18px}.panel{display:none}.panel.active
     <div style="height:10px"></div>
     <div class="scoregrid" id="minusGrid"></div>
   </div>
-  <div class="status" id="studentStatus">🔒 等待老師開放</div>
-</section></main><script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+  <div class="status" id="studentStatus" role="status">正在連線至老師端…</div>
+</section></main>
+<script>
+const animals = ['🦁', '🐯', '🐼', '🦊', '🐸'];
+const team = new URLSearchParams(location.search).get('team');
+const selected = /^[1-5]$/.test(team) ? Number(team) - 1 : -1;
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const studentStatus = $('#studentStatus');
+if (selected >= 0) {
+  $('#studentAnimal').textContent = animals[selected];
+  $('#studentTeam').textContent = selected + 1;
+} else {
+  $('#teamPrompt').textContent = '尚未指定組別';
+  studentStatus.innerHTML = '請掃描各組的 QR Code，或<a href="./">回首頁選擇組別</a>。';
+}
+</script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script><script>
-const animals=['🦁','🐯','🐼','🦊','🐸']; const q=new URLSearchParams(location.search); let selected=Math.min(4,Math.max(0,(Number(q.get('team'))||1)-1));
-const app=firebase.initializeApp(firebaseConfig);const db=firebase.database();const root=db.ref('rooms/main');let state={};const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];let soundOn=true;
+function startStudentGame() {
+const app=firebase.initializeApp(firebaseConfig);const db=firebase.database();const root=db.ref('rooms/main');let state={};let soundOn=true;
 function beep(freq=660,dur=.12,type='sine'){if(!soundOn)return;const A=new (window.AudioContext||window.webkitAudioContext)(),o=A.createOscillator(),g=A.createGain();o.type=type;o.frequency.value=freq;o.connect(g);g.connect(A.destination);g.gain.setValueAtTime(.26,A.currentTime);g.gain.exponentialRampToValueAtTime(.001,A.currentTime+dur);o.start();o.stop(A.currentTime+dur)}
 function successSound(){beep(523,.14,'square');setTimeout(()=>beep(659,.14,'square'),130);setTimeout(()=>beep(784,.16,'square'),260);setTimeout(()=>beep(1047,.48,'square'),410)}
 function norm(v={}){v.scores=v.scores||[0,0,0,0,0];v.diceResults=v.diceResults||[null,null,null,null,null];v.open=Object.assign({buzz:false,dice:false,score:false,random:false,bomb:false,double:false,steal:false},v.open||{});v.used=v.used||{};v.used.dice=v.used.dice||[false,false,false,false,false];v.used.score=v.used.score||[false,false,false,false,false];return v}
-function render(){state=norm(state);$('#studentAnimal').textContent=animals[selected];$('#studentTeam').textContent=selected+1;$('#studentScore').textContent=state.scores[selected]||0;$('#buzzBtn').disabled=!state.open.buzz||state.buzzerWinner!=null;$('#buzzBtn').innerHTML=state.open.buzz&&state.buzzerWinner==null?'🔔 搶答鈴<br><span class="sub">現在可以搶！</span>':'🔔 搶答鈴<br><span class="sub">'+(state.buzzerWinner!=null?'本輪已有人搶到':'等待老師開放')+'</span>';$('#diceBtn').disabled=!state.open.dice||state.used.dice[selected];$('#diceText').textContent=!state.open.dice?'🔒 等待老師開放':state.used.dice[selected]?`本輪已擲：${state.diceResults[selected]??''}`:'✨ 現在可以擲！';$('#scoreLock').textContent=state.open.score&&!state.used.score[selected]?'｜現在可以選一次':'｜'+(state.used.score[selected]?'本輪已使用':'等待老師開放');$$('.scorechoice').forEach(b=>b.disabled=!state.open.score||state.used.score[selected]);['random','bomb','double','steal'].forEach(t=>$('#'+t+'Btn').disabled=!state.open[t])}
-root.on('value',s=>{state=norm(s.val()||{});render();if(state.buzzerWinner===selected)$('#studentStatus').textContent='🎉 搶到了！請回答老師的問題';else if(state.buzzerWinner!=null)$('#studentStatus').textContent='🔒 本輪已由其他組搶到'});
+function render(){state=norm(state);$('#studentScore').textContent=state.scores[selected]||0;$('#buzzBtn').disabled=!state.open.buzz||state.buzzerWinner!=null;$('#buzzBtn').innerHTML=state.open.buzz&&state.buzzerWinner==null?'🔔 搶答鈴<br><span class="sub">現在可以搶！</span>':'🔔 搶答鈴<br><span class="sub">'+(state.buzzerWinner!=null?'本輪已有人搶到':'等待老師開放')+'</span>';$('#diceBtn').disabled=!state.open.dice||state.used.dice[selected];$('#diceText').textContent=!state.open.dice?'🔒 等待老師開放':state.used.dice[selected]?`本輪已擲：${state.diceResults[selected]??''}`:'✨ 現在可以擲！';$('#scoreLock').textContent=state.open.score&&!state.used.score[selected]?'｜現在可以選一次':'｜'+(state.used.score[selected]?'本輪已使用':'等待老師開放');$$('.scorechoice').forEach(b=>b.disabled=!state.open.score||state.used.score[selected]);['random','bomb','double','steal'].forEach(t=>$('#'+t+'Btn').disabled=!state.open[t])}
+root.on('value',s=>{state=norm(s.val()||{});render();if(state.buzzerWinner===selected)$('#studentStatus').textContent='🎉 搶到了！請回答老師的問題';else if(state.buzzerWinner!=null)studentStatus.textContent='🔒 本輪已由其他組搶到';else if(studentStatus.textContent==='正在連線至老師端…')studentStatus.textContent='🔒 等待老師開放'}, () => {
+  studentStatus.textContent = '無法讀取老師端資料，請通知老師。';
+});
 $('#buzzBtn').onclick=async()=>{if(!state.open.buzz||state.buzzerWinner!=null)return;const r=await root.child('buzzerWinner').transaction(v=>v==null?selected:undefined);if(r.committed){await root.update({'open/buzz':false,status:`🔔 ${animals[selected]} 第 ${selected+1} 組｜搶答成功！請回答`});successSound()}};
 $('#diceBtn').onclick=async()=>{if(!state.open.dice||state.used.dice[selected])return;const lock=await root.child('used/dice/'+selected).transaction(v=>v?undefined:true);if(!lock.committed)return;let n=1,k=0;const timer=setInterval(async()=>{n=1+Math.floor(Math.random()*6);$('#diceText').textContent='🎲 '+n;beep(260+n*45,.04);if(++k>9){clearInterval(timer);await root.update({['diceResults/'+selected]:n,status:`🎲 ${animals[selected]} 第 ${selected+1} 組擲到 ${n} 點`});$('#studentStatus').textContent=`🎲 第 ${selected+1} 組擲到 ${n} 點！`;successSound()}},80)};
 async function studentScore(n){if(!state.open.score||state.used.score[selected])return;const lock=await root.child('used/score/'+selected).transaction(v=>v?undefined:true);if(!lock.committed)return;const applied=state.doubleMode?n*2:n;await root.child('scores/'+selected).transaction(v=>(Number(v)||0)+applied);$('#studentStatus').textContent=`已送出 ${applied>0?'+':''}${applied} 分，等待下一次開放`;beep(applied>0?760:240,.12)}
 window.studentScore=studentScore;$('#plusGrid').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="scorechoice pos" onclick="studentScore(${n})">+${n}</button>`).join('');$('#minusGrid').innerHTML=[1,2,3,4,5,6].map(n=>`<button class="scorechoice neg" onclick="studentScore(${-n})">-${n}</button>`).join('');
 $('#randomBtn').onclick=()=>$('#studentStatus').textContent='💎 隨機事件已開放，請依老師指示';$('#bombBtn').onclick=()=>$('#studentStatus').textContent='💣 炸彈題進行中！';$('#doubleBtn').onclick=()=>$('#studentStatus').textContent='🔥 加倍題進行中！';$('#stealBtn').onclick=()=>$('#studentStatus').textContent='👑 偷分卡已開放，請依老師指示';
+}
+if (selected >= 0) {
+  try {
+    startStudentGame();
+  } catch (error) {
+    studentStatus.textContent = '無法載入即時連線，請重新整理或通知老師。';
+    console.error(error);
+  }
+}
 </script></body></html>
